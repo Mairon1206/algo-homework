@@ -15,7 +15,7 @@ struct Laboratory {
 // 时间槽定义 (周次, 星期, 时段: 0-上午, 1-下午)
 struct TimeSlot {
     int week;      // 周次 (9 或 10)
-    int day;       // 星期 (0-4 对应周一到周五)
+    int day;       // 星期 (1-5 对应周一到周五)
     int period;    // 时段 (0-上午, 1-下午)
     
     bool operator==(const TimeSlot& other) const {

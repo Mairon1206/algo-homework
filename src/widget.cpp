@@ -1,6 +1,7 @@
 #include "widget.h"
 #include <QMessageBox>
 #include <QHeaderView>
+#include <QMouseEvent>
 #include <sstream>
 
 Widget::Widget(QWidget* parent)
@@ -22,6 +23,7 @@ Widget::Widget(QWidget* parent)
     // 刷新表格
     refreshLabTable();
     refreshRequestTable();
+    refreshQueryCombo();  // 初始化查询下拉框
     
     setWindowTitle("实验室安排系统");
     resize(1000, 700);
@@ -30,6 +32,36 @@ Widget::Widget(QWidget* parent)
 Widget::~Widget() {
     delete scheduler;
     delete database;
+}
+
+bool Widget::eventFilter(QObject* obj, QEvent* event) {
+    // 处理复选框的点击事件
+    if (event->type() == QEvent::MouseButtonPress) {
+        QMouseEvent* mouseEvent = static_cast<QMouseEvent*>(event);
+        QCheckBox* cb = qobject_cast<QCheckBox*>(obj);
+        
+        if (cb) {
+            if (mouseEvent->button() == Qt::LeftButton) {
+                // 左键点击:切换"期望"状态(Checked)
+                if (cb->checkState() == Qt::Checked) {
+                    cb->setCheckState(Qt::Unchecked);  // 期望 -> 未选中
+                } else {
+                    cb->setCheckState(Qt::Checked);  // 未选中/排除 -> 期望(蓝色)
+                }
+                return true;  // 拦截事件,不使用默认的三态循环
+            } else if (mouseEvent->button() == Qt::RightButton) {
+                // 右键点击:切换"排除"状态(PartiallyChecked)
+                if (cb->checkState() == Qt::PartiallyChecked) {
+                    cb->setCheckState(Qt::Unchecked);  // 排除 -> 未选中
+                } else {
+                    cb->setCheckState(Qt::PartiallyChecked);  // 未选中/期望 -> 排除(红色)
+                }
+                return true;  // 事件已处理
+            }
+        }
+    }
+    
+    return QWidget::eventFilter(obj, event);
 }
 
 void Widget::setupUI() {
@@ -130,24 +162,32 @@ void Widget::setupRequestTab() {
     QString periods[] = {"上午", "下午"};
     QString weeks[] = {"第9周", "第10周"};
     
+    // 添加所有工作日标签(修复bug3)
+    for (int d = 0; d < 5; d++) {
+        QLabel* dayLabel = new QLabel(days[d]);
+        dayLabel->setAlignment(Qt::AlignCenter);
+        timeLayout->addWidget(dayLabel, 0, d + 1);
+    }
+    
     for (int w = 0; w < 2; w++) {
-        timeLayout->addWidget(new QLabel("<b>" + weeks[w] + "</b>"), w * 6, 0);
+        timeLayout->addWidget(new QLabel("<b>" + weeks[w] + "</b>"), w * 6 + 1, 0);
         
         for (int p = 0; p < 2; p++) {
-            timeLayout->addWidget(new QLabel(periods[p]), w * 6 + p * 3 + 1, 0);
+            timeLayout->addWidget(new QLabel(periods[p]), w * 6 + p * 3 + 2, 0);
             
             for (int d = 0; d < 5; d++) {
-                if (w == 0 && p == 0 && d == 0) {
-                    timeLayout->addWidget(new QLabel(days[d]), 0, d + 1);
-                }
-                
                 timeSlotChecks[w][d][p] = new QCheckBox();
+                timeSlotChecks[w][d][p]->setTristate(true);  // 启用三态
                 timeSlotChecks[w][d][p]->setProperty("week", w);
                 timeSlotChecks[w][d][p]->setProperty("day", d);
                 timeSlotChecks[w][d][p]->setProperty("period", p);
+                
+                // 安装事件过滤器以捕获右键点击(修复bug2)
+                timeSlotChecks[w][d][p]->installEventFilter(this);
+                
                 connect(timeSlotChecks[w][d][p], &QCheckBox::stateChanged, 
                         this, &Widget::updateTimeSlotSelection);
-                timeLayout->addWidget(timeSlotChecks[w][d][p], w * 6 + p * 3 + 1, d + 1);
+                timeLayout->addWidget(timeSlotChecks[w][d][p], w * 6 + p * 3 + 2, d + 1);
             }
         }
     }
@@ -161,7 +201,7 @@ void Widget::setupRequestTab() {
     legendLayout->addWidget(preferredLabel);
     legendLayout->addWidget(excludedLabel);
     legendLayout->addStretch();
-    timeLayout->addLayout(legendLayout, 12, 0, 1, 6);
+    timeLayout->addLayout(legendLayout, 13, 0, 1, 6);
     
     layout->addWidget(timeSlotGroup);
     
@@ -276,16 +316,7 @@ void Widget::addLaboratory() {
         QMessageBox::information(this, "成功", "实验室添加成功!");
         labLocationEdit->clear();
         refreshLabTable();
-        
-        // 更新查询下拉框
-        queryLabCombo->clear();
-        auto labs = database->getAllLaboratories();
-        for (const auto& lab : labs) {
-            queryLabCombo->addItem(
-                QString::fromStdString(lab.location), 
-                lab.id
-            );
-        }
+        refreshQueryCombo();  // 更新查询下拉框
     } else {
         QMessageBox::critical(this, "错误", "实验室添加失败!");
     }
@@ -299,10 +330,24 @@ void Widget::deleteLaboratory() {
     }
     
     int id = labTable->item(row, 0)->text().toInt();
+    QString location = labTable->item(row, 1)->text();
+    
+    // 添加确认对话框
+    QMessageBox::StandardButton reply = QMessageBox::question(
+        this, 
+        "确认删除", 
+        QString("确定要删除实验室: %1 吗?").arg(location),
+        QMessageBox::Yes | QMessageBox::No
+    );
+    
+    if (reply == QMessageBox::No) {
+        return;
+    }
     
     if (database->deleteLaboratory(id)) {
         QMessageBox::information(this, "成功", "实验室删除成功!");
         refreshLabTable();
+        refreshQueryCombo();  // 删除后也要更新查询下拉框
     } else {
         QMessageBox::critical(this, "错误", "实验室删除失败!");
     }
@@ -316,6 +361,18 @@ void Widget::refreshLabTable() {
         labTable->setItem(i, 0, new QTableWidgetItem(QString::number(labs[i].id)));
         labTable->setItem(i, 1, new QTableWidgetItem(QString::fromStdString(labs[i].location)));
         labTable->setItem(i, 2, new QTableWidgetItem(QString::number(labs[i].capacity)));
+    }
+}
+
+void Widget::refreshQueryCombo() {
+    // 更新查询页面的实验室下拉框
+    queryLabCombo->clear();
+    auto labs = database->getAllLaboratories();
+    for (const auto& lab : labs) {
+        queryLabCombo->addItem(
+            QString::fromStdString(lab.location), 
+            lab.id
+        );
     }
 }
 
@@ -353,7 +410,7 @@ void Widget::addRequest() {
         for (int d = 0; d < 5; d++) {
             for (int p = 0; p < 2; p++) {
                 QCheckBox* cb = timeSlotChecks[w][d][p];
-                TimeSlot slot = {w + 9, d, p};  // 周次从9开始
+                TimeSlot slot = {w + 9, d + 1, p};  // 周次从9开始,day从1开始(周一=1)
                 
                 if (cb->checkState() == Qt::Checked) {
                     request.preferredSlots.push_back(slot);
@@ -397,6 +454,20 @@ void Widget::deleteRequest() {
     }
     
     int id = requestTable->item(row, 0)->text().toInt();
+    QString classId = requestTable->item(row, 1)->text();
+    QString teacher = requestTable->item(row, 3)->text();
+    
+    // 添加确认对话框
+    QMessageBox::StandardButton reply = QMessageBox::question(
+        this, 
+        "确认删除", 
+        QString("确定要删除申请: %1 (%2) 吗?").arg(classId).arg(teacher),
+        QMessageBox::Yes | QMessageBox::No
+    );
+    
+    if (reply == QMessageBox::No) {
+        return;
+    }
     
     if (database->deleteRequest(id)) {
         QMessageBox::information(this, "成功", "申请删除成功!");
@@ -437,6 +508,24 @@ void Widget::generateSchedule() {
     scheduleResultText->clear();
     scheduleResultText->append("正在生成课程安排...\n");
     
+    // 调试:显示申请数据
+    scheduleResultText->append(QString("========== 申请数据检查 =========="));
+    for (const auto& req : requests) {
+        scheduleResultText->append(QString("班级: %1, 期望时间数: %2, 排除时间数: %3")
+            .arg(QString::fromStdString(req.classId))
+            .arg(req.preferredSlots.size())
+            .arg(req.excludedSlots.size()));
+        
+        // 显示前3个期望时间
+        for (size_t i = 0; i < std::min(size_t(3), req.preferredSlots.size()); i++) {
+            scheduleResultText->append(QString("  期望: 第%1周 day=%2 period=%3")
+                .arg(req.preferredSlots[i].week)
+                .arg(req.preferredSlots[i].day)
+                .arg(req.preferredSlots[i].period));
+        }
+    }
+    scheduleResultText->append("");
+    
     int successCount = scheduler->generateSchedule();
     
     auto stats = scheduler->getScheduleStats();
@@ -456,6 +545,23 @@ void Widget::generateSchedule() {
     
     scheduleResultText->append("\n课程安排已保存到数据库!");
     scheduleResultText->append("请前往\"课表查询\"页面查看详细安排。");
+    
+    // 调试:显示生成的课表数据
+    auto allSchedules = database->getAllSchedules();
+    scheduleResultText->append(QString("\n========== 数据库中的课表记录 =========="));
+    scheduleResultText->append(QString("总记录数: %1").arg(allSchedules.size()));
+    
+    // 按day分组统计
+    int dayCount[6] = {0};  // day=1-5
+    for (const auto& sch : allSchedules) {
+        if (sch.timeSlot.day >= 1 && sch.timeSlot.day <= 5) {
+            dayCount[sch.timeSlot.day]++;
+        }
+    }
+    for (int d = 1; d <= 5; d++) {
+        const char* days[] = {"", "周一", "周二", "周三", "周四", "周五"};
+        scheduleResultText->append(QString("%1: %2条记录").arg(days[d]).arg(dayCount[d]));
+    }
     
     if (successCount > 0) {
         QMessageBox::information(this, "成功", 
@@ -539,10 +645,11 @@ QString Widget::timeSlotToString(const TimeSlot& slot) {
 }
 
 QString Widget::dayToString(int day) {
-    const char* days[] = {"周一", "周二", "周三", "周四", "周五"};
+    const char* days[] = {"", "周一", "周二", "周三", "周四", "周五"};  // day从1开始
+    if (day < 1 || day > 5) return "未知";
     return QString::fromUtf8(days[day]);
 }
 
 QString Widget::periodToString(int period) {
-    return period == 0 ? "上午(2-5节)" : "下午(6-9节)";
+    return period == 0 ? "上午" : "下午";
 }

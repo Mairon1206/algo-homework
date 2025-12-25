@@ -35,10 +35,10 @@ int main() {
     req1.teacher = "朱洁";
     req1.priority = 1;
     req1.preferredSlots = {
-        {9, 0, 0}, {9, 1, 0}, {9, 2, 0}, {9, 3, 0}, {9, 4, 0}  // 第9周周一至周五上午
+        {9, 1, 0}, {9, 2, 0}, {9, 3, 0}, {9, 4, 0}, {9, 5, 0}  // 第9周周一至周五上午
     };
     req1.excludedSlots = {
-        {9, 0, 1}, {9, 2, 1}, {9, 3, 1}  // 第9周部分下午不可用
+        {9, 1, 1}, {9, 3, 1}, {9, 4, 1}  // 第9周部分下午不可用
     };
     db.addRequest(req1);
     
@@ -49,10 +49,10 @@ int main() {
     req2.teacher = "胡惠娟";
     req2.priority = 2;
     req2.preferredSlots = {
-        {9, 0, 0}, {9, 1, 0}  // 第9周周一、周二上午
+        {9, 1, 0}, {9, 2, 0}  // 第9周周一、周二上午
     };
     req2.excludedSlots = {
-        {9, 2, 0}, {9, 4, 0}, {9, 4, 1}  // 部分时间不可用
+        {9, 3, 0}, {9, 5, 0}, {9, 5, 1}  // 部分时间不可用
     };
     db.addRequest(req2);
     
@@ -63,10 +63,10 @@ int main() {
     req3.teacher = "戴华";
     req3.priority = 3;
     req3.preferredSlots = {
-        {9, 1, 0}, {9, 2, 0}  // 第9周周二、周三上午
+        {9, 2, 0}, {9, 3, 0}  // 第9周周二、周三上午
     };
     req3.excludedSlots = {
-        {9, 0, 0}, {9, 0, 1}, {9, 3, 1}
+        {9, 1, 0}, {9, 1, 1}, {9, 4, 1}
     };
     db.addRequest(req3);
     
@@ -77,10 +77,10 @@ int main() {
     req4.teacher = "徐鹤";
     req4.priority = 4;
     req4.preferredSlots = {
-        {9, 1, 0}, {9, 2, 0}, {9, 4, 0}  // 第9周部分上午
+        {9, 2, 0}, {9, 3, 0}, {9, 5, 0}  // 第9周部分上午
     };
     req4.excludedSlots = {
-        {9, 0, 1}, {9, 1, 1}
+        {9, 1, 1}, {9, 2, 1}
     };
     db.addRequest(req4);
     
@@ -124,7 +124,7 @@ int main() {
                   << " | 教师: " << req.teacher
                   << " | 实验室: " << lab.location
                   << " | 第" << sch.timeSlot.week << "周 "
-                  << days[sch.timeSlot.day] << " "
+                  << days[sch.timeSlot.day - 1] << " "
                   << periods[sch.timeSlot.period] << std::endl;
     }
     std::cout << "------------------------------------------------------" << std::endl;
@@ -135,7 +135,7 @@ int main() {
     for (const auto& sch : classSchedules) {
         auto lab = db.getLaboratory(sch.labId);
         std::cout << "  第" << sch.timeSlot.week << "周 "
-                  << days[sch.timeSlot.day] << " "
+                  << days[sch.timeSlot.day - 1] << " "
                   << periods[sch.timeSlot.period]
                   << " - " << lab.location << std::endl;
     }

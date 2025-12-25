@@ -26,11 +26,15 @@ public:
     Widget(QWidget* parent = nullptr);
     ~Widget();
 
+protected:
+    bool eventFilter(QObject* obj, QEvent* event) override;
+
 private slots:
     // 实验室管理
     void addLaboratory();
     void deleteLaboratory();
     void refreshLabTable();
+    void refreshQueryCombo();  // 更新查询下拉框
     
     // 申请管理
     void addRequest();
