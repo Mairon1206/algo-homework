@@ -44,7 +44,9 @@ private slots:
     // 课表查询
     void queryByLab();
     void queryByClass();
-
+protected:
+    // 添加事件过滤器声明
+    bool eventFilter(QObject *obj, QEvent *event) override;
 private:
     // 数据库和调度器
     Database* database;

@@ -2,6 +2,7 @@
 #include <QMessageBox>
 #include <QHeaderView>
 #include <sstream>
+#include <QMouseEvent> 
 
 Widget::Widget(QWidget* parent)
     : QWidget(parent) {
@@ -145,6 +146,8 @@ void Widget::setupRequestTab() {
                 timeSlotChecks[w][d][p]->setProperty("week", w);
                 timeSlotChecks[w][d][p]->setProperty("day", d);
                 timeSlotChecks[w][d][p]->setProperty("period", p);
+                // 安装事件过滤器，让Widget能够捕获复选框的鼠标事件
+                timeSlotChecks[w][d][p]->installEventFilter(this);
                 connect(timeSlotChecks[w][d][p], &QCheckBox::stateChanged, 
                         this, &Widget::updateTimeSlotSelection);
                 timeLayout->addWidget(timeSlotChecks[w][d][p], w * 6 + p * 3 + 1, d + 1);
@@ -528,6 +531,27 @@ void Widget::queryByClass() {
         queryResultTable->setItem(i, 5, new QTableWidgetItem(
             periodToString(schedules[i].timeSlot.period)));
     }
+}
+
+bool Widget::eventFilter(QObject *obj, QEvent *event) {
+    if (event->type() == QEvent::MouseButtonPress) {
+        QCheckBox* checkbox = qobject_cast<QCheckBox*>(obj);
+        // 确保是时间段复选框（通过检查是否有week属性）
+        if (checkbox && checkbox->property("week").isValid()) {
+            QMouseEvent* mouseEvent = static_cast<QMouseEvent*>(event);
+            if (mouseEvent->button() == Qt::RightButton) {
+                // 右键点击逻辑：切换"不可用"状态 (PartiallyChecked)
+                // 如果当前是不可用(红)，则取消；否则设为不可用
+                if (checkbox->checkState() == Qt::PartiallyChecked) {
+                    checkbox->setCheckState(Qt::Unchecked);
+                } else {
+                    checkbox->setCheckState(Qt::PartiallyChecked);
+                }
+                return true; // 拦截事件，阻止默认处理
+            }
+        }
+    }
+    return QWidget::eventFilter(obj, event);
 }
 
 // 辅助函数
